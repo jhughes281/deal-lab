@@ -182,6 +182,7 @@
      --------------------------------------------------------- */
 
   var PANELS = [
+    { id: 'import', n: '', label: 'Import a listing', group: 'start' },
     { id: 'deal', n: '01', label: 'Property', group: 'assess' },
     { id: 'market', n: '02', label: 'Market', group: 'assess' },
     { id: 'comps', n: '03', label: 'Comps', group: 'assess' },
@@ -198,7 +199,7 @@
   var active = 'deal';
 
   function buildRail() {
-    ['assess', 'results', 'decide'].forEach(function (g) {
+    ['start', 'assess', 'results', 'decide'].forEach(function (g) {
       var ul = document.querySelector('[data-rail-group="' + g + '"]');
       clear(ul);
       PANELS.filter(function (p) { return p.group === g; }).forEach(function (p) {
@@ -233,6 +234,380 @@
     try { localStorage.setItem('deallab.panel', id); } catch (e) { /* ignore */ }
     var main = document.getElementById('main');
     if (main && window.scrollY > 160) window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  /* ---------- 0. Import ---------- */
+
+  var IM = window.DealLab.Import;
+  var KEY_RC = 'deallab.rentcast.key';
+  var KEY_RC_USE = 'deallab.rentcast.usage';
+  var importPlan = null;          // rows awaiting the user's approval
+  var importExtras = null;        // comps that came back with a lookup
+
+  var rates = { taxRate: 2.2, insRate: 0.8, rentRule: 0 };
+
+  function rcUsage() {
+    var month = new Date().toISOString().slice(0, 7);
+    try {
+      var raw = JSON.parse(localStorage.getItem(KEY_RC_USE) || '{}');
+      if (raw.month === month) return raw;
+    } catch (e) { /* ignore */ }
+    return { month: month, count: 0 };
+  }
+  function rcSpend(n) {
+    var u = rcUsage();
+    u.count += n;
+    try { localStorage.setItem(KEY_RC_USE, JSON.stringify(u)); } catch (e) { /* ignore */ }
+    return u;
+  }
+
+  function buildImport() {
+    var m = mount('import');
+    clear(m);
+
+    /* --- A. paste a listing --- */
+    var box = h('textarea', {
+      id: 'imp-paste', rows: 7, spellcheck: 'false',
+      placeholder: 'Paste the listing URL here — or open the listing, select the whole page (Ctrl+A), copy, and paste it here for the full set of numbers.',
+      style: 'width:100%;padding:.6rem;border:1px solid var(--rule);border-radius:var(--radius);' +
+             'background:var(--paper);font-family:var(--mono);font-size:.85rem;line-height:1.5;resize:vertical'
+    });
+
+    m.appendChild(h('section', { class: 'card' }, [
+      h('div', { class: 'card__head' }, [
+        h('h3', {}, ['From a listing']),
+        h('p', { class: 'label' }, ['No key needed'])
+      ]),
+      h('label', { for: 'imp-paste', style: 'display:block;font-size:.8rem;font-weight:500;margin-bottom:.3rem' },
+        ['Listing link, or the copied listing page']),
+      box,
+      h('div', { class: 'pipe__acts' }, [
+        h('button', {
+          class: 'btn btn--sm', type: 'button',
+          onclick: function () { readListing(box.value); }
+        }, ['Read it']),
+        h('button', {
+          class: 'btn btn--ghost btn--sm', type: 'button',
+          onclick: function () { box.value = ''; box.focus(); renderImportPlan(null); }
+        }, ['Clear'])
+      ]),
+      h('p', { class: 'card__note' }, [
+        'A link on its own only carries the address — that is all a URL contains. Copying the ' +
+        'page itself gets the price, size, year, taxes, HOA and the site’s rent estimate, because ' +
+        'by then your browser has already loaded it.'
+      ])
+    ]));
+
+    /* --- B. gap-filling rates --- */
+    m.appendChild(h('section', { class: 'card' }, [
+      h('div', { class: 'card__head' }, [
+        h('h3', {}, ['Filling the gaps']),
+        h('p', { class: 'label' }, ['Only where nothing was found'])
+      ]),
+      h('div', { class: 'fields' }, [
+        rateField('taxRate', 'Property tax rate', 'Of price, a year. Texas runs roughly 2.0–2.8%.'),
+        rateField('insRate', 'Insurance rate', 'Of price, a year.'),
+        rateField('rentRule', 'Rent as % of price', 'Monthly. Leave at 0 and no rent will be guessed.')
+      ]),
+      h('p', { class: 'card__note' }, [
+        'Anything filled this way is marked as an estimate in the table below, never as a found ' +
+        'figure. A guessed rent is the fastest way to talk yourself into a bad deal, which is why ' +
+        'that one starts switched off.'
+      ])
+    ]));
+
+    /* --- C. address lookup --- */
+    var u = rcUsage();
+    var addrInput = h('input', {
+      id: 'imp-addr', type: 'text', autocomplete: 'off',
+      placeholder: '4218 Cedar Post Ln, Houston, TX 77053',
+      value: deal.meta.address || '',
+      style: 'width:100%;min-height:44px;padding:.5rem .6rem;border:1px solid var(--rule);' +
+             'border-radius:var(--radius);background:var(--paper);font-family:var(--mono);font-size:.9rem'
+    });
+    var keyInput = h('input', {
+      id: 'imp-key', type: 'password', autocomplete: 'off', placeholder: 'RentCast API key',
+      value: (function () { try { return localStorage.getItem(KEY_RC) || ''; } catch (e) { return ''; } })(),
+      style: 'width:100%;min-height:44px;padding:.5rem .6rem;border:1px solid var(--rule);' +
+             'border-radius:var(--radius);background:var(--paper);font-family:var(--mono);font-size:.9rem'
+    });
+
+    var want = { record: true, value: true, rent: true };
+    function wantBox(k, label) {
+      var id = 'imp-want-' + k;
+      return h('label', { class: 'check', for: id, style: 'grid-column:auto' }, [
+        h('input', {
+          id: id, type: 'checkbox', checked: true,
+          onchange: function (e) { want[k] = e.target.checked; }
+        }),
+        h('span', {}, [label])
+      ]);
+    }
+
+    m.appendChild(h('section', { class: 'card' }, [
+      h('div', { class: 'card__head' }, [
+        h('h3', {}, ['From an address']),
+        h('p', { class: 'label' }, ['Needs your own key'])
+      ]),
+      h('div', { class: 'fields' }, [
+        h('div', { class: 'field field--wide' }, [
+          h('label', { for: 'imp-addr' }, ['Property address']),
+          h('div', { class: 'field__in' }, [addrInput])
+        ]),
+        h('div', { class: 'field field--wide' }, [
+          h('label', { for: 'imp-key' }, ['RentCast API key']),
+          h('div', { class: 'field__in' }, [keyInput]),
+          h('p', { class: 'field__hint' }, [
+            'Free tier is 50 requests a month. Get one at ',
+            h('a', { href: IM.RENTCAST_SIGNUP, target: '_blank', rel: 'noopener noreferrer' }, ['app.rentcast.io']),
+            '. Stored only in this browser and sent only to RentCast.'
+          ])
+        ])
+      ]),
+      h('div', { style: 'display:flex;gap:1.1rem;flex-wrap:wrap;margin:.4rem 0' }, [
+        wantBox('record', 'Property record'),
+        wantBox('value', 'Value estimate and sale comps'),
+        wantBox('rent', 'Rent estimate and rent comps')
+      ]),
+      h('div', { class: 'pipe__acts' }, [
+        h('button', {
+          class: 'btn btn--sm', type: 'button', 'data-lookup': true,
+          onclick: function (e) { runLookup(addrInput.value, keyInput.value, want, e.target); }
+        }, ['Look it up']),
+        h('button', {
+          class: 'btn btn--ghost btn--sm', type: 'button',
+          onclick: function () {
+            try {
+              if (keyInput.value) localStorage.setItem(KEY_RC, keyInput.value);
+              else localStorage.removeItem(KEY_RC);
+              toast(keyInput.value ? 'Key saved in this browser.' : 'Key removed.');
+            } catch (err) { toast('This browser will not let the page store anything.'); }
+          }
+        }, ['Remember key'])
+      ]),
+      h('p', { class: 'card__note' }, [
+        'Each ticked box is one request. ',
+        h('b', {}, [String(u.count)]),
+        ' used so far in ' + u.month + '. A lookup also fills the comparables tables, so the ' +
+        'valuation and rent sections have real evidence behind them rather than your guess.'
+      ])
+    ]));
+
+    /* --- D. results --- */
+    m.appendChild(h('div', { 'data-import-out': true }));
+
+    /* --- E. why not the link alone --- */
+    m.appendChild(h('section', { class: 'card' }, [
+      h('div', { class: 'card__head' }, [
+        h('h3', {}, ['Why a link alone is not enough']),
+        h('p', { class: 'label' }, ['The honest answer'])
+      ]),
+      h('p', { style: 'margin:0;font-size:.88rem;line-height:1.6' }, [
+        'This page would have to fetch the listing itself, and the listing sites do not allow that. ' +
+        'Zillow and Redfin refuse cross-origin requests outright; Realtor.com answers automated ' +
+        'callers with a 429. That is their decision and working around it would mean disguising ' +
+        'the request, so the tool does not try. Copying the page works because your browser has ' +
+        'already been served it, and an address lookup works because RentCast licenses the data ' +
+        'and publishes an API for exactly this.'
+      ])
+    ]));
+
+    renderImportPlan(importPlan);
+  }
+
+  function rateField(key, label, hint) {
+    var id = 'rate-' + key;
+    return h('div', { class: 'field field--pct' }, [
+      h('label', { for: id }, [label]),
+      h('div', { class: 'field__in' }, [
+        h('input', {
+          id: id, type: 'number', step: '0.05', min: 0, value: rates[key], inputmode: 'decimal',
+          oninput: function (e) { rates[key] = parseFloat(e.target.value) || 0; }
+        })
+      ]),
+      h('p', { class: 'field__hint' }, [hint])
+    ]);
+  }
+
+  function readListing(raw) {
+    if (!String(raw || '').trim()) return toast('Paste a link or a listing page first.');
+    var parsed = IM.parse(raw);
+    var derived = IM.derive(parsed.fields, rates);
+
+    if (!Object.keys(parsed.fields).length) {
+      importPlan = null;
+      renderImportPlan(null, 'Nothing recognisable in that. If you pasted a link, try copying the listing page itself.');
+      return;
+    }
+
+    if (parsed.source && parsed.source.url) deal.meta.sourceUrl = parsed.source.url;
+
+    importExtras = null;
+    importPlan = {
+      rows: IM.plan(deal, parsed.fields, derived, parsed.evidence),
+      source: parsed.source
+        ? (parsed.source.bareUrl
+            ? 'Read the address out of a ' + parsed.source.site + ' link. Copy the page itself for the rest.'
+            : 'Read from a ' + parsed.source.site + ' listing.')
+        : 'Read from pasted text.',
+      selected: {}
+    };
+    importPlan.rows.forEach(function (r) {
+      if (r.status !== 'missing') importPlan.selected[r.key] = true;
+    });
+    renderImportPlan(importPlan);
+  }
+
+  function runLookup(address, key, want, btn) {
+    var label = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Looking…';
+
+    IM.lookup(address, key, want).then(function (res) {
+      rcSpend(res.calls);
+      var derived = IM.derive(res.fields, rates);
+
+      if (!Object.keys(res.fields).length) {
+        importPlan = null;
+        renderImportPlan(null, res.errors.length
+          ? 'RentCast returned nothing usable — ' + res.errors.join('; ')
+          : 'RentCast has no record for that address. Check the spelling, or include the ZIP.');
+        return;
+      }
+
+      importExtras = { comps: res.comps, rentComps: res.rentComps };
+      importPlan = {
+        rows: IM.plan(deal, res.fields, derived, res.evidence),
+        source: 'Looked up through RentCast (' + res.calls +
+                (res.calls === 1 ? ' request' : ' requests') + ').' +
+                (res.errors.length ? ' Some parts failed: ' + res.errors.join('; ') : ''),
+        selected: {},
+        extras: importExtras
+      };
+      importPlan.rows.forEach(function (r) {
+        if (r.status !== 'missing') importPlan.selected[r.key] = true;
+      });
+      renderImportPlan(importPlan);
+    }).catch(function (e) {
+      importPlan = null;
+      renderImportPlan(null, e.message);
+    }).then(function () {
+      btn.disabled = false;
+      btn.textContent = label;
+    });
+  }
+
+  function renderImportPlan(plan, message) {
+    var out = document.querySelector('[data-import-out]');
+    if (!out) return;
+    clear(out);
+
+    if (message) {
+      out.appendChild(h('section', { class: 'card' }, [
+        h('p', { class: 'pipe__empty', style: 'border-color:var(--neg);color:var(--neg)' }, [message])
+      ]));
+      return;
+    }
+    if (!plan) return;
+
+    var usable = plan.rows.filter(function (r) { return r.status !== 'missing'; });
+    var missing = plan.rows.filter(function (r) { return r.status === 'missing'; });
+
+    var body = h('tbody', {}, usable.map(function (r) {
+      return h('tr', {}, [
+        h('td', {}, [h('input', {
+          type: 'checkbox', checked: !!plan.selected[r.key],
+          'aria-label': 'Apply ' + r.label,
+          style: 'width:1.1rem;height:1.1rem;accent-color:var(--brass)',
+          onchange: function (e) { plan.selected[r.key] = e.target.checked; }
+        })]),
+        h('td', {}, [
+          h('b', { style: 'font-weight:500' }, [r.label]),
+          r.evidence ? h('br') : null,
+          r.evidence ? h('span', { style: 'font-size:.74rem;color:var(--slate)' }, [r.evidence]) : null
+        ]),
+        h('td', { class: 'n', style: 'color:var(--slate)' }, [fmtImport(r.key, r.from)]),
+        h('td', { class: 'n' }, [fmtImport(r.key, r.to)]),
+        h('td', {}, [h('span', {
+          class: 'flag ' + (r.status === 'found' ? 'flag--pass' : 'flag--na')
+        }, [r.status])])
+      ]);
+    }));
+
+    out.appendChild(h('section', { class: 'card' }, [
+      h('div', { class: 'card__head' }, [
+        h('h3', {}, ['What it read']),
+        h('p', { class: 'label' }, [usable.length + ' of ' + plan.rows.length + ' fields'])
+      ]),
+      h('p', { style: 'margin:0 0 .8rem;font-size:.87rem;color:var(--slate)' }, [plan.source]),
+      h('div', { class: 'tbl-wrap' }, [
+        h('table', { class: 'tbl tbl--wide' }, [
+          h('thead', {}, [h('tr', {}, ['Use', 'Field', 'Now', 'New', ''].map(function (t) {
+            return h('th', {}, [t]);
+          }))]),
+          body
+        ])
+      ]),
+      plan.extras && (plan.extras.comps.length || plan.extras.rentComps.length)
+        ? h('p', { style: 'margin:.9rem 0 0;font-size:.85rem' }, [
+            'Also came back: ' + plan.extras.comps.length + ' sale comps and ' +
+            plan.extras.rentComps.length + ' rent comps, which will replace what is in the ' +
+            'comparables tables.'
+          ])
+        : null,
+      h('div', { class: 'pipe__acts' }, [
+        h('button', {
+          class: 'btn btn--sm', type: 'button',
+          onclick: function () { applyImport(plan); }
+        }, ['Apply to the sheet']),
+        h('button', {
+          class: 'btn btn--ghost btn--sm', type: 'button',
+          onclick: function () {
+            usable.forEach(function (r) { plan.selected[r.key] = (r.status === 'found'); });
+            renderImportPlan(plan);
+          }
+        }, ['Found only'])
+      ]),
+      missing.length
+        ? h('p', { class: 'card__note' }, [
+            'Not found, so left alone: ' +
+            missing.map(function (r) { return r.label.toLowerCase(); }).join(', ') + '.'
+          ])
+        : null
+    ]));
+  }
+
+  function fmtImport(key, v) {
+    if (v === undefined || v === null || v === '') return '—';
+    if (key === 'address' || key === 'propType' || key === 'yearBuilt') return String(v);
+    if (key === 'units' || key === 'sqft') return count(v);
+    if (key === 'rent') return money(v) + '/mo';
+    return money(v);
+  }
+
+  function applyImport(plan) {
+    var applied = 0;
+    plan.rows.forEach(function (r) {
+      if (r.status === 'missing' || !plan.selected[r.key]) return;
+      set(r.path, r.to);
+      applied++;
+    });
+
+    if (plan.extras) {
+      if (plan.extras.comps.length) { deal.comps = plan.extras.comps.slice(); applied++; }
+      if (plan.extras.rentComps.length) { deal.rentComps = plan.extras.rentComps.slice(); applied++; }
+    }
+
+    if (!applied) return toast('Nothing was ticked, so nothing changed.');
+
+    if (!deal.meta.name && deal.meta.address) {
+      deal.meta.name = deal.meta.address.split(',')[0];
+    }
+
+    persist();
+    rebuildAll();
+    toast(applied + ' field' + (applied === 1 ? '' : 's') + ' applied. Check the operating expenses before you trust the verdict.');
+    show('returns');
   }
 
   /* ---------- 1. Property ---------- */
@@ -1643,6 +2018,7 @@
     buildIncome();
     buildFinancing();
     buildBox();
+    buildImport();
     recalc();
   }
 

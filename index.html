@@ -44,6 +44,10 @@
 
   <nav class="rail" aria-label="Analysis steps">
     <div class="rail__group">
+      <p class="label" id="rg-0">Start</p>
+      <ul class="rail__list" data-rail-group="start" aria-labelledby="rg-0"></ul>
+    </div>
+    <div class="rail__group">
       <p class="label" id="rg-1">Assess</p>
       <ul class="rail__list" data-rail-group="assess" aria-labelledby="rg-1"></ul>
     </div>
@@ -66,6 +70,18 @@
         With scripts turned off there is nothing to show. Enable JavaScript for this page to use it.</p>
       </div>
     </noscript>
+
+    <!-- 0. Import -->
+    <section class="panel" id="p-import" role="region" aria-label="Import a listing">
+      <div class="panel__head">
+        <p class="label">Start here</p>
+        <h2>Import a listing</h2>
+        <p>Paste a listing and the sheet fills itself, or look an address up if you have a
+           property-data key. Nothing is applied until you say so, and you can see where every
+           figure came from before you accept it.</p>
+      </div>
+      <div data-mount="import"></div>
+    </section>
 
     <!-- 1. Deal -->
     <section class="panel" id="p-deal" role="region" aria-label="The property">
@@ -206,6 +222,7 @@
 <div class="toast" data-toast role="status" aria-live="polite"></div>
 
 <script src="assets/js/engine.js"></script>
+<script src="assets/js/import.js"></script>
 <script src="assets/js/app.js"></script>
 </body>
 </html>

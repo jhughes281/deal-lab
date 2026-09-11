@@ -22,6 +22,7 @@ Registered in `~/.claude/launch.json` as **deal-lab** on port **8755**.
 index.html              the shell: masthead, step rail, panels, readout rail
 assets/css/lab.css      the whole stylesheet
 assets/js/engine.js     the calculation engine — pure functions, no DOM
+assets/js/import.js     listing parser + RentCast lookup — pure functions plus one fetch
 assets/js/app.js        the interface — builds panels, binds inputs, draws results
 ```
 
@@ -29,20 +30,54 @@ assets/js/app.js        the interface — builds panels, binds inputs, draws res
 with `defaults()`, `analyze(deal)`, `maxOffer(deal, target, value)`, `pmt`,
 `amortize`, `irr`, `npv`, `cma`, `rentCma` and `marketScore`. That separation is
 deliberate: the maths can be tested in Node without a browser, which is how it
-was verified.
+was verified. `import.js` is the same: the parser is pure, and the one network
+call is stubbed in its test, so the suite runs offline and spends no quota.
 
-### Testing the engine
+### Testing
 
 ```bash
 node test-engine.js
+node test-import.js
 ```
 
-The harness stubs `window`, requires `engine.js`, and asserts about sixty things
+Between them the two harnesses stub `window` and assert about a hundred things
 — including the worked examples out of the source books (an NOI of $180,000 at an
 8% cap valuing at $2,250,000; break-even occupancy of 55% and 70% from the two
 published examples), an independently known amortisation schedule, IRR against a
-hand-checked case, and round trips such as "feed the calculated break-even rent
-back in and cash flow must come out zero".
+hand-checked case, round trips such as "feed the calculated break-even rent back in
+and cash flow must come out zero", and the listing parser against Zillow-,
+Redfin- and Realtor-shaped pages.
+
+## Getting a property in
+
+Two routes, both on the **Import a listing** panel.
+
+**Paste a listing.** Open the listing, select the whole page, copy, paste. The
+parser pulls price, address, beds, baths, square footage, year built, property
+type, property taxes, HOA dues, and the site's own value and rent estimates. It
+knows a monthly figure from an annual one and normalises both. Tested against
+Zillow-, Redfin- and Realtor-shaped pages. A bare link works too, but a URL only
+carries the address — that really is all that is in it.
+
+**Look up an address.** Needs a free [RentCast](https://app.rentcast.io/app/api)
+key (50 requests a month), pasted into the panel and kept in `localStorage` on
+that machine only. Returns the property record, a value estimate and a rent
+estimate, and fills the comparables tables from the comps that come back. Each
+ticked box is one request; a request that fails does not count against the month.
+
+Nothing is applied until you press **Apply to the sheet**. The table shows the
+current value, the new value, and where each figure came from, with every row
+marked `found` or `estimated` — anything filled from a rate rather than read off
+the listing says so.
+
+### Why the link alone cannot do it
+
+The page would have to fetch the listing itself and the listing sites do not
+permit that. Verified from the deployed page: Zillow and Redfin refuse the
+cross-origin request outright, and Realtor.com answers automated callers with
+429. Working around that would mean disguising the request, so the tool does not.
+Copying the page works because your browser has already been served it, and the
+address lookup works because RentCast licenses the data and publishes an API.
 
 ## What it calculates
 
