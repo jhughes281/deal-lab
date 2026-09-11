@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Deal Lab — real estate deal assessment &amp; profit analysis</title>
+<meta name="description" content="Underwrite a rental, flip, short-term rental or commercial property end to end: market scorecard, comps, NOI, cap rate, cash-on-cash, DSCR, break-even occupancy, a multi-year pro forma with IRR, stress tests and a due diligence checklist.">
+<meta name="theme-color" content="#14191d">
+<meta name="color-scheme" content="light">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/lab.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2314191d'/%3E%3Cpath d='M6 25h20M9 25V13l7-5 7 5v12' fill='none' stroke='%23a06a1f' stroke-width='2'/%3E%3Cpath d='M13 25v-6h6v6' fill='none' stroke='%23f4f2ed' stroke-width='1.8'/%3E%3C/svg%3E">
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to the sheet</a>
+
+<header class="top">
+  <div class="top__in">
+    <div class="brand">
+      <svg class="brand__glyph" viewBox="0 0 32 32" aria-hidden="true">
+        <path d="M4 26h24M8 26V13l8-6 8 6v13" fill="none" stroke="currentColor" stroke-width="2.2"/>
+        <path d="M13 26v-7h6v7" fill="none" stroke="#f4f2ed" stroke-width="2"/>
+      </svg>
+      <span class="brand__name">Deal Lab<span>Deal assessment</span></span>
+    </div>
+
+    <label class="vh" for="deal-name">Deal name</label>
+    <input class="deal-name" id="deal-name" type="text" placeholder="Name this deal" autocomplete="off">
+
+    <div class="top__acts">
+      <button class="btn btn--go" type="button" data-act="save">Save deal</button>
+      <button class="btn" type="button" data-act="export">Export</button>
+      <button class="btn" type="button" data-act="print">Report</button>
+      <button class="btn" type="button" data-act="reset">Reset</button>
+    </div>
+  </div>
+</header>
+
+<div class="shell">
+
+  <nav class="rail" aria-label="Analysis steps">
+    <div class="rail__group">
+      <p class="label" id="rg-1">Assess</p>
+      <ul class="rail__list" data-rail-group="assess" aria-labelledby="rg-1"></ul>
+    </div>
+    <div class="rail__group">
+      <p class="label" id="rg-2">Results</p>
+      <ul class="rail__list" data-rail-group="results" aria-labelledby="rg-2"></ul>
+    </div>
+    <div class="rail__group">
+      <p class="label" id="rg-3">Decide</p>
+      <ul class="rail__list" data-rail-group="decide" aria-labelledby="rg-3"></ul>
+    </div>
+  </nav>
+
+  <main class="main" id="main">
+
+    <noscript>
+      <div class="card">
+        <h2>This sheet calculates in the browser</h2>
+        <p>Deal Lab runs entirely on JavaScript in your own browser — nothing is sent anywhere.
+        With scripts turned off there is nothing to show. Enable JavaScript for this page to use it.</p>
+      </div>
+    </noscript>
+
+    <!-- 1. Deal -->
+    <section class="panel" id="p-deal" role="region" aria-label="The property">
+      <div class="panel__head">
+        <p class="label">Step one</p>
+        <h2>The property</h2>
+        <p>What you are buying, how you intend to hold it, and what it costs to get in the door.
+           Everything downstream recalculates from these figures as you type.</p>
+      </div>
+      <div data-mount="deal"></div>
+    </section>
+
+    <!-- 2. Market -->
+    <section class="panel" id="p-market" role="region" aria-label="Market and location">
+      <div class="panel__head">
+        <p class="label">Step two</p>
+        <h2>Market and location</h2>
+        <p>Location is the one input you cannot renovate. Score the market before you score the
+           building — a clean set of numbers in a failing submarket is still a bad deal.</p>
+      </div>
+      <div data-mount="market"></div>
+    </section>
+
+    <!-- 3. Comps -->
+    <section class="panel" id="p-comps" role="region" aria-label="Comparable sales and rents">
+      <div class="panel__head">
+        <p class="label">Step three</p>
+        <h2>Comparables</h2>
+        <p>Value and rent both come from the market, not from a seller's spreadsheet. Enter what
+           has actually sold and what is actually renting nearby.</p>
+      </div>
+      <div data-mount="comps"></div>
+    </section>
+
+    <!-- 4. Income -->
+    <section class="panel" id="p-income" role="region" aria-label="Income and operating expenses">
+      <div class="panel__head">
+        <p class="label">Step four</p>
+        <h2>Income and expenses</h2>
+        <p>Build this from a blank sheet rather than from the seller's numbers. Question every
+           line, and put a management fee in even if you plan to manage it yourself.</p>
+      </div>
+      <div data-mount="income"></div>
+    </section>
+
+    <!-- 5. Financing -->
+    <section class="panel" id="p-financing" role="region" aria-label="Financing">
+      <div class="panel__head">
+        <p class="label">Step five</p>
+        <h2>Financing</h2>
+        <p>Debt does not change what a building earns — it changes what you keep. Cap rate stays
+           put when you move these; cash-on-cash and coverage move a lot.</p>
+      </div>
+      <div data-mount="financing"></div>
+    </section>
+
+    <!-- 6. Returns -->
+    <section class="panel" id="p-returns" role="region" aria-label="Year one returns">
+      <div class="panel__head">
+        <p class="label">Results</p>
+        <h2>Year one</h2>
+        <p>Where the rent goes on the way to your pocket, what the deal returns, and how it reads
+           against the screens the trade actually uses.</p>
+      </div>
+      <div data-mount="returns"></div>
+    </section>
+
+    <!-- 7. Projection -->
+    <section class="panel" id="p-projection" role="region" aria-label="Hold period projection">
+      <div class="panel__head">
+        <p class="label">Results</p>
+        <h2>The hold</h2>
+        <p>Year one is a snapshot. This is the film: rent and expenses drifting apart, the loan
+           amortising underneath, and the sale at the end that decides most of the return.</p>
+      </div>
+      <div data-mount="projection"></div>
+    </section>
+
+    <!-- 8. Stress -->
+    <section class="panel" id="p-stress" role="region" aria-label="Stress tests">
+      <div class="panel__head">
+        <p class="label">Results</p>
+        <h2>What breaks it</h2>
+        <p>A deal that only works on the base case is not a deal. Each row below re-runs the whole
+           sheet with one assumption moved against you.</p>
+      </div>
+      <div data-mount="stress"></div>
+    </section>
+
+    <!-- 9. Diligence -->
+    <section class="panel" id="p-diligence" role="region" aria-label="Due diligence checklist">
+      <div class="panel__head">
+        <p class="label">Decide</p>
+        <h2>Due diligence</h2>
+        <p>The numbers above are only as good as the documents behind them. Work these three lists
+           inside your inspection period, with a detective's eye rather than an anxious buyer's.</p>
+      </div>
+      <div data-mount="diligence"></div>
+    </section>
+
+    <!-- 10. Buy box -->
+    <section class="panel" id="p-box" role="region" aria-label="Buy box and method">
+      <div class="panel__head">
+        <p class="label">Decide</p>
+        <h2>Buy box and method</h2>
+        <p>The thresholds every deal is scored against, and a plain account of how each figure on
+           this sheet is calculated.</p>
+      </div>
+      <div data-mount="box"></div>
+    </section>
+
+    <!-- 11. Pipeline -->
+    <section class="panel" id="p-pipeline" role="region" aria-label="Saved deals">
+      <div class="panel__head">
+        <p class="label">Decide</p>
+        <h2>Pipeline</h2>
+        <p>Deals you have saved, stored in this browser only. Nothing is uploaded anywhere, so
+           export anything you would be sorry to lose.</p>
+      </div>
+      <div data-mount="pipeline"></div>
+    </section>
+
+  </main>
+
+  <aside class="readout" aria-label="Live readout">
+    <div class="stamp" data-stamp data-state="idle">
+      <div class="stamp__top">
+        <p class="stamp__word"><span class="stamp__dot"></span><span data-verdict-word>Working</span></p>
+        <p class="stamp__sub" data-verdict-sub>—</p>
+      </div>
+      <div class="stamp__rows" data-readout aria-live="polite"></div>
+      <ul class="stamp__why" data-verdict-why></ul>
+    </div>
+  </aside>
+
+</div>
+
+<div class="toast" data-toast role="status" aria-live="polite"></div>
+
+<script src="assets/js/engine.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
